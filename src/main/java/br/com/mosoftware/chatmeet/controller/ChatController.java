@@ -6,16 +6,19 @@ import br.com.mosoftware.chatmeet.domain.mapper.ChatMapper;
 import br.com.mosoftware.chatmeet.domain.model.Chat;
 import br.com.mosoftware.chatmeet.domain.model.Message;
 import br.com.mosoftware.chatmeet.domain.model.User;
+import br.com.mosoftware.chatmeet.service.EventEmitterService;
 import br.com.mosoftware.chatmeet.service.impl.ChatService;
 import br.com.mosoftware.chatmeet.service.impl.MessageService;
 import br.com.mosoftware.chatmeet.service.impl.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.validation.Valid;
 import java.util.List;
 
+@CrossOrigin
 @RequiredArgsConstructor
 @RestController
 @RequestMapping( "/api/chat" )
@@ -25,29 +28,31 @@ public class ChatController {
 
     private final UserService userService;
 
+    private final EventEmitterService eventEmitter;
+
     private final ChatService chatService;
 
-    private final ChatMapper chatMapper = ChatMapper.INSTANCE;
+    private final ChatMapper mapper = ChatMapper.INSTANCE;
 
     // Pegar as informações do Chat
     @GetMapping( "/{chatId}" )
     public ResponseEntity<?> getChat( @PathVariable Long chatId ) {
         Chat chat = chatService.getById( chatId );
-        return ResponseEntity.ok( chatMapper.toDto( chat ) );
+        return ResponseEntity.ok( mapper.toDto( chat ) );
     }
 
     // Listar mensagens do chat
     @GetMapping( "/messages/{chatId}" )
     public ResponseEntity<?> getChatMessages( @PathVariable Long chatId ) {
         List<Message> messages = chatService.getMessages( chatId );
-        return ResponseEntity.ok( chatMapper.messageDtoList( messages ) );
+        return ResponseEntity.ok( mapper.messageDtoList( messages ) );
     }
 
     // Listar os usuários do chat
     @GetMapping( "/users/{chatId}" )
     public ResponseEntity<?> getChatUsers( @PathVariable Long chatId ) {
         List<User> users = chatService.getUsers( chatId );
-        return ResponseEntity.ok( chatMapper.userDtoList( users ) );
+        return ResponseEntity.ok( mapper.userDtoList( users ) );
     }
 
     // Criar um chat com o usuário inicial
@@ -55,7 +60,7 @@ public class ChatController {
     public ResponseEntity<?> newChat( @Valid @RequestBody UserForm form ) {
         Chat chat = chatService.create( new Chat() );
         chat = addUser( chat, form.getNickname() );
-        return ResponseEntity.ok( chatMapper.toDto( chat ) );
+        return ResponseEntity.ok( mapper.toDto( chat ) );
     }
 
     // Entrar em um chat existente
@@ -63,7 +68,7 @@ public class ChatController {
     public ResponseEntity<?> enterChat( @PathVariable Long chatId, @Valid @RequestBody UserForm form ) {
         Chat chat = chatService.getById( chatId );
         chat = addUser( chat, form.getNickname() );
-        return ResponseEntity.ok( chatMapper.toDto( chat ) );
+        return ResponseEntity.ok( mapper.toDto( chat ) );
     }
 
     // Enviar mensagens em um chat
@@ -71,7 +76,7 @@ public class ChatController {
     public ResponseEntity<?> messageChat( @PathVariable Long chatId, @Valid @RequestBody MessageForm form ) {
         Chat chat = chatService.getById( chatId );
         chat = addMessage( chat, form );
-        return ResponseEntity.ok( chatMapper.toDto( chat ) );
+        return ResponseEntity.ok( mapper.toDto( chat ) );
     }
 
     // Sair do chat
@@ -84,6 +89,11 @@ public class ChatController {
             return ResponseEntity.noContent().build();
         }
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/subscribe")
+    public SseEmitter subscribe() {
+        return eventEmitter.subscribe();
     }
 
 
@@ -109,6 +119,11 @@ public class ChatController {
                         .author( user.getNickname() )
                         .build();
         message = messageService.create( message );
+        eventEmitter.dispatchEvents(
+                SseEmitter.event()
+                        .name( "message" )
+                        .data( mapper.messageDto( message ) )
+        );
         return chatService.addMessage( chat.getId(), message );
     }
 }

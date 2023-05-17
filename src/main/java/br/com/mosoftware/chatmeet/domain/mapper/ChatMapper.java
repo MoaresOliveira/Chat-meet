@@ -18,6 +18,8 @@ public interface ChatMapper {
 
     ChatDTO toDto( Chat entity );
 
+    MessageDTO messageDto( Message entity );
+
     Chat toEntity( ChatDTO dto );
 
     List<Chat> toListEntity( List<ChatDTO> dtoList );
